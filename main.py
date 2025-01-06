@@ -1,93 +1,78 @@
 import tensorflow as tf
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.callbacks import Callback
 import numpy as np
-import argparse
-import os
+import time
+
+print("TensorFlow version:", tf.__version__)
+
+BATCH_SIZE = 2048
+EPOCHS = 1
+NUM_BATCHES = 1000
+
+# Random input data
+num_samples = BATCH_SIZE * NUM_BATCHES
+input_shape = (28, 28)
+num_classes = 10
+
+x_train = np.random.rand(num_samples, *input_shape)
+y_train = np.random.randint(0, num_classes, num_samples)
+
+devices = ['/CPU:0', '/GPU:0']
+configurations = [
+    ('/GPU:0', '/GPU:0', '/GPU:0'),
+    ('/CPU:0', '/CPU:0', '/CPU:0'),
+    ('/CPU:0', '/CPU:0', '/GPU:0'),
+    ('/CPU:0', '/GPU:0', '/GPU:0'),
+    ('/GPU:0', '/GPU:0', '/CPU:0')
+]
+
+results = []
 
 
-# In TF2, we typically don't need placeholders or sessions.
+# Custom callback to log batch times
+class BatchTimeLogger(Callback):
+    def on_train_batch_begin(self, batch, logs=None):
+        self.batch_start_time = time.time()
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=100, help='Batch size')
-    parser.add_argument('--epochs', type=int, default=1, help='Number of epochs to train')
-    parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate')
-    parser.add_argument('--dropout', type=float, default=0.9, help='Dropout rate (keep probability is 0.9 => rate=0.1)')
-    parser.add_argument('--data_dir', type=str, default='/tmp/tensorflow/mnist/input_data', help='Data directory')
-    parser.add_argument('--log_dir', type=str, default='/tmp/tensorflow/mnist/logs/mnist_with_summaries',
-                        help='Log directory')
-    return parser.parse_args()
-
-
-def load_mnist(data_dir):
-    """Loads MNIST from tf.keras.datasets or from the data_dir if specified."""
-    # TF2 provides built-in MNIST loading, no need for separate input_data
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
-    # Normalize [0, 1]
-    x_train = x_train.astype(np.float32) / 255.0
-    x_test = x_test.astype(np.float32) / 255.0
-
-    # Flatten 28x28 into 784
-    x_train = x_train.reshape(-1, 784)
-    x_test = x_test.reshape(-1, 784)
-    return (x_train, y_train), (x_test, y_test)
+    def on_train_batch_end(self, batch, logs=None):
+        batch_time = time.time() - self.batch_start_time
+        global total_time_this_config, count_batch
+        if count_batch == 0:
+            count_batch += 1
+        else:
+            total_time_this_config += batch_time
+        # print(f"Batch {batch + 1} - Time taken: {batch_time:.6f} seconds")
 
 
-def build_model(learning_rate=0.001, dropout_rate=0.1):
-    """Build a simple 2-layer feedforward network using tf.keras."""
-    model = tf.keras.Sequential([
-        tf.keras.layers.InputLayer(input_shape=(784,)),
-        tf.keras.layers.Dense(500, activation='relu', name='layer1'),
-        tf.keras.layers.Dropout(dropout_rate),
-        tf.keras.layers.Dense(10, activation='softmax', name='layer2')  # Output layer
-    ])
+for config in configurations:
+    print(f"Testing configuration: {config}")
+    total_time_this_config = 0
+    count_batch = 0
 
-    # Compile the model
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-        metrics=['accuracy']
-    )
+    # Set device for each layer
+    with tf.device(config[0]):
+        flatten = Flatten(input_shape=input_shape)
+    with tf.device(config[1]):
+        dense1 = Dense(128, activation='relu')
+    with tf.device(config[2]):
+        dense2 = Dense(64, activation='relu')
+        output_layer = Dense(num_classes, activation='softmax')
 
-    print(f'model summary: {model.summary()}')
+    # Build the model
+    model = Sequential([flatten, dense1, dense2, output_layer])
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-    for idx, layer in enumerate(model.layers):
-        print(idx, layer.name, layer)
+    # Measure time taken for training
+    start_time = time.time()
+    model.fit(x_train, y_train, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=1, callbacks=[BatchTimeLogger()])
+    end_time = time.time()
 
+    # Record results
+    time_taken = end_time - start_time
+    results.append((config, total_time_this_config, time_taken))
 
-    return model
-
-
-def main():
-    args = parse_args()
-
-    # Prepare data
-    (x_train, y_train), (x_test, y_test) = load_mnist(args.data_dir)
-
-    # Build model
-    # Note: If dropout keep probability = 0.9 => dropout rate = 1 - 0.9 = 0.1
-    dropout_rate = 1.0 - args.dropout
-    model = build_model(learning_rate=args.learning_rate, dropout_rate=dropout_rate)
-
-    # Define TensorBoard callback to log training info
-    # This will save logs for TensorBoard in args.log_dir
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=args.log_dir, histogram_freq=1
-    )
-
-    # Train the model
-    model.fit(
-        x_train,
-        y_train,
-        batch_size=args.batch_size,
-        epochs=args.epochs,
-        validation_split=0.1,  # 10% of training data for validation
-        callbacks=[tensorboard_callback]
-    )
-
-    # Evaluate on test data
-    test_loss, test_acc = model.evaluate(x_test, y_test, verbose=2)
-    print(f'\nTest accuracy: {test_acc:.4f}')
-
-
-if __name__ == '__main__':
-    main()
+# Print results
+for config, total_time_this_config, time_taken in results:
+    print(f"Config: {config}, Time for {EPOCHS} epochs: {total_time_this_config:.6f} seconds, Total time: {time_taken:.6f} seconds")
