@@ -9,7 +9,7 @@ print("TensorFlow version:", tf.__version__)
 
 BATCH_SIZE = 2048
 EPOCHS = 1
-NUM_BATCHES = 1000
+NUM_BATCHES = 100
 
 # Random input data
 num_samples = BATCH_SIZE * NUM_BATCHES
@@ -54,10 +54,10 @@ for config in configurations:
     # Set device for each layer
     with tf.device(config[0]):
         flatten = Flatten(input_shape=input_shape)
+        dense1 = Dense(1024, activation='relu')
     with tf.device(config[1]):
-        dense1 = Dense(128, activation='relu')
+        dense2 = Dense(512, activation='relu')
     with tf.device(config[2]):
-        dense2 = Dense(64, activation='relu')
         output_layer = Dense(num_classes, activation='softmax')
 
     # Build the model
@@ -72,6 +72,7 @@ for config in configurations:
     # Record results
     time_taken = end_time - start_time
     results.append((config, total_time_this_config, time_taken))
+    print(f"Time taken for this configuration: {time_taken:.6f} seconds, Total time taken: {total_time_this_config:.6f} seconds\n")
 
 # Print results
 for config, total_time_this_config, time_taken in results:
