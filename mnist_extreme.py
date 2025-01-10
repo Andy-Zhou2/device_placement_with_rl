@@ -8,7 +8,7 @@ import time
 
 print("TensorFlow version:", tf.__version__)
 
-# tf.debugging.set_log_device_placement(True)
+tf.debugging.set_log_device_placement(True)
 tf.config.set_soft_device_placement(False)
 
 BATCH_SIZE = 64
@@ -109,14 +109,14 @@ def train_with_config(config):
     #               metrics=['accuracy'])
 
     # Measure time taken for training
-    start_time = time.time()
-    model.fit(x_train_tensor, y_train_tensor, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=1, callbacks=[BatchTimeLogger()])
-    end_time = time.time()
-
-    time_taken = end_time - start_time
-    print(
-        f"Time taken for this configuration: {time_taken:.6f} seconds, Total time taken for batches: {total_time_this_config:.6f} seconds\n")
-    return config, total_time_this_config, time_taken
+    # start_time = time.time()
+    # model.fit(x_train_tensor, y_train_tensor, epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=1, callbacks=[BatchTimeLogger()])
+    # end_time = time.time()
+    #
+    # time_taken = end_time - start_time
+    # print(
+    #     f"Time taken for this configuration: {time_taken:.6f} seconds, Total time taken for batches: {total_time_this_config:.6f} seconds\n")
+    # return config, total_time_this_config, time_taken
 
 
 # List of configurations
