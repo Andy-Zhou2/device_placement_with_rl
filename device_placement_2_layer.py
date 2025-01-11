@@ -1,5 +1,7 @@
 import tensorflow as tf
 import time
+import matplotlib.pyplot as plt
+
 
 # Define the model with layers on different devices
 class ConfigurableModel(tf.Module):
@@ -20,7 +22,7 @@ class ConfigurableModel(tf.Module):
             self.w2 = tf.Variable(tf.random.normal([D, 1]), name='w2')
             self.b2 = tf.Variable(tf.zeros([1]), name='b2')
 
-    # @tf.function
+    @tf.function
     def __call__(self, x, device_x):
         with tf.device(device_x):
             x = tf.identity(x)  # Ensure input starts on the specified device
@@ -42,10 +44,11 @@ def create_dataset(num_samples=1000):
 
 # Define configurations as a list of device placements
 configs = [
+    ["/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0"],
     ["/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0"],
     ["/CPU:0", "/GPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
+    ["/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0", "/GPU:0"],
     ["/GPU:0", "/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0"],
-    ["/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0"],
 ]
 
 # Test each configuration and measure the time
@@ -60,6 +63,7 @@ for config in configs:
     for i in range(100):
         start_time = time.time()
         _ = model(X, device_x)
+        tf.test.experimental.sync_devices()
         end_time = time.time()
 
         if i > 0:  # Discard the first measurement
@@ -68,7 +72,3 @@ for config in configs:
     average_time = sum(times) / len(times)
     results.append((config, average_time))
     print(f"Config: {config} -> Average Time: {average_time:.4f} seconds")
-
-# Display all results
-# for config, avg_time in results:
-#     print(f"Configuration {config} took {avg_time:.4f} seconds on average for inference.")
