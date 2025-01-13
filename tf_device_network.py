@@ -1,6 +1,7 @@
 from tf_device_measure import OP_TYPES, ADJ_FORWARD, ADJ_BACKWARD, SHAPES, NUM_DEVICE_CHOICES
 import torch
 import torch.nn as nn
+from torch.distributions import Categorical
 
 op_types_tensor = torch.tensor(OP_TYPES, dtype=torch.long)  # shape [3]
 adj_forward_tensor = torch.tensor(ADJ_FORWARD, dtype=torch.float32)  # shape [3,3]
@@ -127,7 +128,34 @@ class AutoRegressiveTransformerPolicy(nn.Module):
 
         return logits_list
 
+    def sample_action_and_logprob(self):
+        """
+        Returns:
+            action (torch.LongTensor): shape [batch_size, m]
+            log_prob (torch.Tensor):   shape [batch_size]
+        """
+        logits = self.forward()  # [batch_size, m, n]
+        # For each dimension i in [0, m-1], we create a categorical distribution
+        dists = [Categorical(logits=logits[i]) for i in range(3)]
+
+        # Sample each dimension, compute sum of log probs
+        actions = []
+        log_probs = []
+        for dist in dists:
+            a = dist.sample()  # shape [batch_size]
+            lp = dist.log_prob(a)  # shape [batch_size]
+            actions.append(a)
+            log_probs.append(lp)
+
+        # stack along last dimension => [batch_size, m]
+        action = torch.stack(actions, dim=-1)
+        # sum over m => [batch_size]
+        log_prob = torch.stack(log_probs, dim=-1).sum(dim=-1)
+        return action, log_prob, logits
+
 if __name__ == '__main__':
     net = AutoRegressiveTransformerPolicy()
     logits = net()
     print(logits)
+    action, log_prob = net.sample_action_and_logprob()
+    print(action, log_prob)

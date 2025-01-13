@@ -2,6 +2,20 @@ import time
 import numpy as np
 import tensorflow as tf
 
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    # Create 2 virtual GPUs with 1GB memory each
+    try:
+        tf.config.set_logical_device_configuration(
+            gpus[0],
+            [tf.config.LogicalDeviceConfiguration(memory_limit=8000),
+             tf.config.LogicalDeviceConfiguration(memory_limit=8000), ]
+        )
+        logical_gpus = tf.config.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPU,", len(logical_gpus), "Logical GPUs")
+    except RuntimeError as e:
+        # Virtual devices must be set before GPUs have been initialized
+        print(e)
 
 DEVICE_OPTIONS = [
     "/CPU:0",
@@ -51,7 +65,7 @@ def create_dataset(num_samples=1000):
     return tf.random.normal([num_samples, 10])
 
 
-def measure_inference_time_3devices(devices, n_warmup=1, n_iters=10, batch_size=1000):
+def measure_inference_time_3devices(devices, n_warmup=1, n_iters=100, batch_size=1000):
     """
     Given a triple of devices: (device_x, device_dense1, device_dense2),
     measure the average inference time.
@@ -103,3 +117,14 @@ SHAPES = [
     [1000, 300000, 0, 0],  # dense1
     [1000, 1, 0, 0],  # dense2
 ]
+
+
+if __name__ == '__main__':
+    print(measure_inference_time_3devices([0, 0, 0]))
+    print(measure_inference_time_3devices([1, 1, 1]))
+    print(measure_inference_time_3devices([2, 2, 2]))
+    print(measure_inference_time_3devices([0, 1, 2]))
+    print(measure_inference_time_3devices([1, 1, 2]))
+    print(measure_inference_time_3devices([1, 2, 2]))
+
+
