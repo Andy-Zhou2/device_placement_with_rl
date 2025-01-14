@@ -72,6 +72,7 @@ class AutoRegressiveTransformerPolicy(nn.Module):
     The input to the transformer includes the operation embedding +
     the previously chosen device tokens (if any).
     """
+
     def __init__(self, embed_dim=32, n_heads=2, n_layers=2):
         super().__init__()
         self.op_embedder = OperationEmbeddingNet(type_vocab_size=2, embed_dim=embed_dim)
@@ -89,9 +90,7 @@ class AutoRegressiveTransformerPolicy(nn.Module):
 
         # We'll produce logits for each step (one device selection).
         # We do so by reading the transformer's last hidden for that step.
-        self.token_heads = nn.ModuleList([
-            nn.Linear(embed_dim, NUM_DEVICE_CHOICES) for _ in range(3)
-        ])
+        self.token_heads = nn.Linear(embed_dim, NUM_DEVICE_CHOICES)
 
         self.op_types_tensor = op_types_tensor  # shape [3]
         self.adj_forward_tensor = adj_forward_tensor  # shape [3,3]
@@ -109,7 +108,7 @@ class AutoRegressiveTransformerPolicy(nn.Module):
         batch_size = 1
 
         op_emb = self.op_embedder(
-            self.op_types_tensor,   # shape [3]
+            self.op_types_tensor,  # shape [3]
             self.shape_tensor,  # shape [3,4]
             self.adj_forward_tensor,  # shape [3,3]
             self.adj_backward_tensor,  # shape [3,3]
@@ -120,11 +119,7 @@ class AutoRegressiveTransformerPolicy(nn.Module):
 
         out = self.transformer(op_emb)  # => [B, 3, embed_dim]
 
-        logits_list = []
-        for i in range(3):
-            # out[:, i, :] => shape [B, embed_dim]
-            logits_i = self.token_heads[i](out[:, i, :])  # => [B, NUM_DEVICE_CHOICES]
-            logits_list.append(logits_i)
+        logits_list = self.token_heads(out)  # => [B, 3, NUM_DEVICE_CHOICES]
 
         return logits_list
 
@@ -135,27 +130,27 @@ class AutoRegressiveTransformerPolicy(nn.Module):
             log_prob (torch.Tensor):   shape [batch_size]
         """
         logits = self.forward()  # [batch_size, m, n]
-        # For each dimension i in [0, m-1], we create a categorical distribution
-        dists = [Categorical(logits=logits[i]) for i in range(3)]
+        dists = Categorical(logits=logits)
 
-        # Sample each dimension, compute sum of log probs
-        actions = []
-        log_probs = []
-        for dist in dists:
-            a = dist.sample()  # shape [batch_size]
-            lp = dist.log_prob(a)  # shape [batch_size]
-            actions.append(a)
-            log_probs.append(lp)
-
-        # stack along last dimension => [batch_size, m]
-        action = torch.stack(actions, dim=-1)
-        # sum over m => [batch_size]
-        log_prob = torch.stack(log_probs, dim=-1).sum(dim=-1)
+        action = dists.sample()
+        log_prob = dists.log_prob(action).sum(dim=-1)
         return action, log_prob, logits
+
+    def get_log_prob(self, action):
+        """
+        Given a specific action, return the log-probability.
+        """
+        logits = self.forward()
+        dists = Categorical(logits=logits)
+        log_prob = dists.log_prob(action).sum(dim=-1)
+        return log_prob, logits
+
 
 if __name__ == '__main__':
     net = AutoRegressiveTransformerPolicy()
     logits = net()
     print(logits)
-    action, log_prob = net.sample_action_and_logprob()
-    print(action, log_prob)
+    action, log_prob, logits = net.sample_action_and_logprob()
+    print(action, log_prob, logits)
+    log_prob_again, logits = net.get_log_prob(action)
+    print(log_prob_again, logits)

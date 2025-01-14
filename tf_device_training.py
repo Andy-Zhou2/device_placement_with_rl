@@ -1,96 +1,120 @@
-from tf_device_network import AutoRegressiveTransformerPolicy
 import torch
 from torch import optim
+
+from tf_device_network import AutoRegressiveTransformerPolicy
 from tf_device_measure import measure_inference_time_3devices
 
 
-def train_reinforce(
+def train_ppo(
         policy,
         optimizer,
         num_iterations=2000,
         batch_size=10,
-        baseline_decay=0.9
+        baseline_decay=0.9,
+        ppo_clip=0.2,
+        ppo_epochs=4
 ):
     """
-    Trains the given policy using REINFORCE with a moving average baseline.
-    Accumulates trajectories (1-step episodes in this case) for `batch_size` times
-    before updating the parameters.
+    Trains the given policy using single-step PPO with a moving average baseline.
+    Gathers 'batch_size' single-step episodes before each PPO update.
 
-    :param policy: Policy network (AutoRegressiveTransformerPolicy)
-    :param optimizer: Optimizer (e.g., torch.optim.Adam)
-    :param num_iterations: Total number of episodes to run (1 step per episode)
-    :param batch_size: Number of episodes to collect before each update
-    :param baseline_decay: Factor for moving average baseline, new baseline is
-                          old_baseline * baseline_decay + (1 - baseline_decay) * mean_reward
+    :param policy: Policy network (AutoRegressiveTransformerPolicy).
+    :param optimizer: Optimizer (e.g., torch.optim.Adam).
+    :param num_iterations: Total number of single-step episodes to run.
+    :param batch_size: Number of single-step episodes to collect before each update.
+    :param baseline_decay: Factor for moving average baseline.
+    :param ppo_clip: The epsilon value for PPO clipping.
+    :param ppo_epochs: How many epochs of updates to run per batch.
     """
-    # Simple moving average baseline initialized to 0.
+    # Moving average baseline
     baseline = 0.0
 
-    # Buffers for collected data
-    log_probs_buffer = []
+    # Buffers
+    old_log_probs_buffer = []  # Log-prob under old parameters
+    actions_buffer = []
     rewards_buffer = []
 
+    # Because PPO needs "old" log probabilities, we will temporarily store
+    # the policy parameters before collecting the batch.
+    old_policy_state_dict = None
+
     for iteration in range(num_iterations):
-        # 1) Sample action and log-prob from the policy
+        # 1) Sample action and log-prob from *current* policy
         action, log_prob, logits = policy.sample_action_and_logprob()
         action = action[0]
-        log_prob = log_prob[0]
+        current_lprob = log_prob[0].detach().cpu()
 
-        # 2) Measure inference time and convert to reward
-        #    We'll treat negative sqrt(time) as the reward
-        #    (since you want to minimize time, i.e. negative of cost).
-        n_iters = 5 if iteration < 100 else 20
+        # 2) Measure inference time => reward = - sqrt(time)
+        n_iters = 10 if iteration < 200 else 100
         t = torch.tensor(measure_inference_time_3devices(action, n_iters=n_iters))
-        reward = -torch.log(t)
+        reward = -torch.sqrt(t)
 
-        print(f"Iteration: {iteration}, Action: {action}, Reward: {reward.item()}, Time: {t.item()}")
+        print(f"Iteration: {iteration}, Action: {action}, Reward: {reward.item():.5f}, Time: {t.item():.5f}")
 
-        # 3) Store samples in buffer
-        log_probs_buffer.append(log_prob)
+        # 3) Store data in buffers
+        old_log_probs_buffer.append(current_lprob)
+        actions_buffer.append(action)
         rewards_buffer.append(reward)
 
-        # 4) Only update when we've collected `batch_size` steps/episodes
+        # 4) Once we reach batch_size single-step episodes, do a PPO update
         if (iteration + 1) % batch_size == 0:
-            # Compute advantage = (reward - baseline) for each step in the batch
-            rewards_tensor = torch.stack(rewards_buffer)
+            # Convert buffers to tensors
+            old_log_probs_tensor = torch.stack(old_log_probs_buffer)  # shape [batch_size]
+            actions_tensor = torch.stack(actions_buffer)  # shape [batch_size]
+            rewards_tensor = torch.stack(rewards_buffer)  # shape [batch_size]
+
+            # Compute advantage = R - baseline
             advantages = rewards_tensor - baseline
 
-            # Update baseline via a moving average
-            batch_mean_reward = rewards_tensor.mean()
-            baseline = baseline_decay * baseline + (1.0 - baseline_decay) * batch_mean_reward.item()
+            # Update baseline (moving average)
+            batch_mean_reward = rewards_tensor.mean().item()
+            baseline = baseline_decay * baseline + (1.0 - baseline_decay) * batch_mean_reward
 
-            # Compute loss = - (1/batch_size) * sum(log_prob * advantage)
-            loss = 0.0
-            for lp, adv in zip(log_probs_buffer, advantages):
-                loss += -lp * adv
-            loss = loss / batch_size
+            # PPO typically does multiple epochs over the same batch
+            for _ in range(ppo_epochs):
+                new_log_probs_tensor, _ = policy.get_log_prob(actions_tensor)
 
-            # 5) Gradient update
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                # Calculate ratio
+                ratio = torch.exp(new_log_probs_tensor - old_log_probs_tensor)
 
-            logit_display = [logits[i].detach().cpu().numpy().tolist() for i in range(3)]
-            prob_display = [torch.softmax(logits[i], dim=-1).detach().cpu().numpy().tolist() for i in range(3)]
+                # Clipped objective: L_clip = - mean( min(ratio * A, clip(ratio)* A ) )
+                surr1 = ratio * advantages
+                surr2 = torch.clamp(ratio, 1.0 - ppo_clip, 1.0 + ppo_clip) * advantages
+                policy_loss = -torch.mean(torch.min(surr1, surr2))
 
-            # Print debug info
+                # Gradient step
+                optimizer.zero_grad()
+                policy_loss.backward()
+                optimizer.step()
+
+            logit_display = logits.detach().cpu().numpy()
+            prob_display = torch.softmax(logits, dim=-1).detach().cpu().numpy()
+            print(f"Logits: {logit_display}, \n"
+                  f"Probs: {prob_display}")
+
+            # Print debug info (we show info from the *last* step in this batch)
             print(
-                f"Episode: {iteration + 1}, "
-                f"Loss: {loss.item():.4f}, "
-                f"Mean Reward: {batch_mean_reward.item():.4f}, "
+                f"Step {iteration + 1} / {num_iterations}, "
+                f"Policy Loss: {policy_loss.item():.4f}, "
+                f"Mean Reward: {batch_mean_reward:.4f}, "
                 f"Baseline: {baseline:.4f}, "
                 f"Last Action: {action}, "
-                f"Last Time: {t.item():.4f}, \n"
-                f"Logits: {logit_display}\n"
-                f"Probs: {prob_display}\n"
+                f"Last Time: {t.item():.4f}"
             )
 
-            # 6) Clear buffers
-            log_probs_buffer = []
+            # Clear buffers
+            old_log_probs_buffer = []
+            actions_buffer = []
             rewards_buffer = []
 
 
-policy = AutoRegressiveTransformerPolicy()
-optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+if __name__ == "__main__":
+    policy = AutoRegressiveTransformerPolicy()
+    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 
-train_reinforce(policy, optimizer, num_iterations=2000)
+    train_ppo(
+        policy=policy,
+        optimizer=optimizer,
+    )
+
+
