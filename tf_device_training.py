@@ -3,6 +3,7 @@ import numpy as np
 from torch import optim
 from tf_device_network import AutoRegressiveTransformerPolicy
 from tf_device_measure import measure_inference_time_3devices
+import logging
 
 
 def set_seed(seed):
@@ -42,7 +43,7 @@ def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
         t = torch.tensor(inference_fn(action, n_iters=n_iters))
         reward = -torch.sqrt(t)  # Example reward function
 
-        print(f"Iteration: {i}, Action: {action}, Reward: {reward.item():.3f}, Time: {t.item():.3f}")
+        logging.info(f"Iteration: {i}, Action: {action}, Reward: {reward.item()}, Time: {t.item()}")
 
         log_probs_buffer.append(log_prob)
         actions_buffer.append(action)
@@ -137,40 +138,52 @@ def train(
 
         update_fn(policy, optimizer, log_probs, actions, advantages, **update_kwargs)
 
-        print(
+        logging.info(
             f"Batch: {iteration + 1}/{num_baches}, "
-            f"Mean Reward: {rewards.mean().item():.4f}, "
-            f"Baseline: {baseline:.4f}"
+            f"Mean Reward: {rewards.mean().item()}, "
+            f"Baseline: {baseline}"
         )
 
         logits = policy()
         logit_display = logits.detach().cpu().numpy()
         prob_display = torch.softmax(logits, dim=-1).detach().cpu().numpy()
-        print(f"Logits: {logit_display}, \n"
-              f"Probs: {prob_display}")
+        logging.info(f"Logits: {logit_display}, \n"
+                     f"Probs: {prob_display}")
 
 
 if __name__ == "__main__":
+    ALGO = "PPO"  # "REINFORCE"
+    # Configure logging to write to a specific file with a desired format
+    logging.basicConfig(
+        filename=F'experiment_logs/{ALGO}.log',  # Replace with your log file path
+        filemode='a',  # Append mode; change to 'w' for overwrite mode
+        level=logging.INFO,  # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+
     set_seed(42)
     policy = AutoRegressiveTransformerPolicy()
     optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 
-    # train(
-    #     policy=policy,
-    #     optimizer=optimizer,
-    #     num_baches=2000,
-    #     batch_size=10,
-    #     baseline_decay=0.9,
-    #     update_fn=ppo_loss_update,
-    #     ppo_clip=0.2,
-    #     ppo_epochs=4
-    # )
-
-    train(
-        policy=policy,
-        optimizer=optimizer,
-        num_baches=2000,
-        batch_size=10,
-        baseline_decay=0.9,
-        update_fn=reinforce_loss_update,
-    )
+    if ALGO == "PPO":
+        train(
+            policy=policy,
+            optimizer=optimizer,
+            num_baches=250,
+            batch_size=10,
+            baseline_decay=0.9,
+            update_fn=ppo_loss_update,
+            ppo_clip=0.2,
+            ppo_epochs=5
+        )
+    elif ALGO == "REINFORCE":
+        train(
+            policy=policy,
+            optimizer=optimizer,
+            num_baches=2000,
+            batch_size=10,
+            baseline_decay=0.9,
+            update_fn=reinforce_loss_update,
+        )
+    else:
+        raise ValueError("Unknown algorithm")
