@@ -508,22 +508,25 @@ class TFOPTDecoder(keras.layers.Layer):
         self.padding_idx = config.pad_token_id
         self.layerdrop = config.layerdrop
         num_embeddings = config.max_position_embeddings
-        self.embed_tokens = TFSharedEmbeddings(
-            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="embed_tokens"
-        )
-        self.embed_positions = TFOPTLearnedPositionalEmbedding(
-            num_embeddings,
-            config.hidden_size,
-            name="embed_positions",
-        )
+
+        with tf.device(config.device_placement[0]):
+            self.embed_tokens = TFSharedEmbeddings(
+                config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="embed_tokens"
+            )
+            self.embed_positions = TFOPTLearnedPositionalEmbedding(
+                num_embeddings,
+                config.hidden_size,
+                name="embed_positions",
+            )
 
         # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
-        if config.do_layer_norm_before and not config._remove_final_layer_norm:
-            self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-        else:
-            self.final_layer_norm = None
+        with tf.device(config.device_placement[33]):
+            if config.do_layer_norm_before and not config._remove_final_layer_norm:
+                self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+            else:
+                self.final_layer_norm = None
 
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = keras.layers.Dense(config.word_embed_proj_dim, name="project_out", use_bias=False)
@@ -533,7 +536,11 @@ class TFOPTDecoder(keras.layers.Layer):
             self.project_in = None
             self.project_out = None
 
-        self.layers = [TFOPTDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
+        # self.layers = [TFOPTDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
+        self.layers = []
+        for i in range(config.num_hidden_layers):
+            with tf.device(config.device_placement[1 + i]):
+                self.layers.append(TFOPTDecoderLayer(config, name=f"layers.{i}"))
         self.dropout = keras.layers.Dropout(config.dropout)
 
     def get_embed_tokens(self):
@@ -633,93 +640,96 @@ class TFOPTDecoder(keras.layers.Layer):
                 Whether or not to use the model in training mode (some modules like dropout modules have different
                 behaviors between training and evaluation).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
-
-        if inputs_embeds is None:
-            check_embeddings_within_bounds(input_ids, self.embed_tokens.vocab_size)
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if attention_mask is None:
-            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.bool)
-        else:
-            tf.debugging.assert_equal(
-                shape_list(attention_mask)[1],
-                past_key_values_length + input_shape[1],
-                message=(
-                    f"The provided attention mask has length {tf.shape(attention_mask)[1]}, but its length should be "
-                    f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
-                ),
+        with tf.device(self.config.device_placement[0]):
+            output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+            output_hidden_states = (
+                output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
             )
-        pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
+            use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
+            return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.project_in is not None:
-            inputs_embeds = self.project_in(inputs_embeds)
+            if input_ids is not None and inputs_embeds is not None:
+                raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            elif input_ids is not None:
+                input_shape = shape_list(input_ids)
+            elif inputs_embeds is not None:
+                input_shape = shape_list(inputs_embeds)[:-1]
+            else:
+                raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        hidden_states = inputs_embeds + pos_embeds
+            past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        present_key_values = () if use_cache else None
+            if inputs_embeds is None:
+                check_embeddings_within_bounds(input_ids, self.embed_tokens.vocab_size)
+                inputs_embeds = self.embed_tokens(input_ids)
 
-        # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
-        for attn_mask_name, attn_mask in [("head_mask", head_mask)]:
-            if attn_mask is not None:
+            if attention_mask is None:
+                attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.bool)
+            else:
                 tf.debugging.assert_equal(
-                    shape_list(attn_mask)[0],
-                    len(self.layers),
+                    shape_list(attention_mask)[1],
+                    past_key_values_length + input_shape[1],
                     message=(
-                        f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for"
-                        f" {shape_list(attn_mask)[0]}."
+                        f"The provided attention mask has length {tf.shape(attention_mask)[1]}, but its length should be "
+                        f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
                     ),
                 )
+            pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
+
+            attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
+
+            if self.project_in is not None:
+                inputs_embeds = self.project_in(inputs_embeds)
+
+            hidden_states = inputs_embeds + pos_embeds
+
+            # decoder layers
+            all_hidden_states = () if output_hidden_states else None
+            all_self_attns = () if output_attentions else None
+            present_key_values = () if use_cache else None
+
+            # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
+            for attn_mask_name, attn_mask in [("head_mask", head_mask)]:
+                if attn_mask is not None:
+                    tf.debugging.assert_equal(
+                        shape_list(attn_mask)[0],
+                        len(self.layers),
+                        message=(
+                            f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for"
+                            f" {shape_list(attn_mask)[0]}."
+                        ),
+                    )
 
         for idx, decoder_layer in enumerate(self.layers):
+            with tf.device(self.config.device_placement[1 + idx]):
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
+
+                past_key_value = past_key_values[idx] if past_key_values is not None else None
+
+                hidden_states, layer_self_attn, present_key_value = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    layer_head_mask=head_mask[idx] if head_mask is not None else None,
+                    past_key_value=past_key_value,
+                )
+
+                if use_cache:
+                    present_key_values += (present_key_value,)
+
+                if output_attentions:
+                    all_self_attns += (layer_self_attn,)
+
+        with tf.device(self.config.device_placement[33]):
+            if self.final_layer_norm is not None:
+                hidden_states = self.final_layer_norm(hidden_states)
+
+            if self.project_out is not None:
+                hidden_states = self.project_out(hidden_states)
+
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
-
-            hidden_states, layer_self_attn, present_key_value = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                past_key_value=past_key_value,
-            )
-
-            if use_cache:
-                present_key_values += (present_key_value,)
-
-            if output_attentions:
-                all_self_attns += (layer_self_attn,)
-
-        if self.final_layer_norm is not None:
-            hidden_states = self.final_layer_norm(hidden_states)
-
-        if self.project_out is not None:
-            hidden_states = self.project_out(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         if not return_dict:
             return tuple(

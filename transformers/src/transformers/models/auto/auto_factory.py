@@ -532,6 +532,10 @@ class _BaseAutoModelClass:
                 **hub_kwargs,
                 **kwargs,
             )
+            # add device placement to config
+            assert 'device_placement' in kwargs
+            config.device_placement = kwargs["device_placement"]
+            del kwargs["device_placement"]
 
             # if torch_dtype=auto was passed here, ensure to pass it on
             if kwargs_orig.get("torch_dtype", None) == "auto":
