@@ -1,4 +1,4 @@
-from transformers import AutoTokenizer, TFAutoModelForCausalLM
+from transformers import AutoTokenizer, AutoConfig, TFAutoModelForCausalLM
 import tensorflow as tf
 import time
 
@@ -18,7 +18,7 @@ model_name = "facebook/opt-125m"
 #         # Virtual devices must be set before GPUs have been initialized
 #         print(e)
 
-device_placement = [1] * 34  # pre-process, 32 layers, and post-process
+device_placement = [0] * 14  # pre-process, 32 layers, and post-process
 DEVICE_OPTIONS = [
     "/CPU:0",
     "/GPU:0",
@@ -26,10 +26,12 @@ DEVICE_OPTIONS = [
 ]
 device_placement = list(map(lambda x: DEVICE_OPTIONS[x], device_placement))
 
-
 start_time = time.time()
-model = TFAutoModelForCausalLM.from_pretrained(model_name, device_placement=device_placement)
+config = AutoConfig.from_pretrained(model_name)
+config.device_placement = device_placement
+model = TFAutoModelForCausalLM.from_config(config)
 print("Time until loading model:", time.time() - start_time)
+
 tokenizer = AutoTokenizer.from_pretrained(model_name, from_tf=True)
 print("Time until loading tokenizer:", time.time() - start_time)
 
@@ -43,9 +45,28 @@ print("Time for inference warmup:", time.time() - start_time)
 max_length = 50
 generated_ids = inputs["input_ids"]
 
+
+# fixed generation
+start_time = time.time()
+C = 50
+for _ in range(C):
+    outputs = model(input_ids=generated_ids)
+    logits = outputs.logits
+
+print("Time for generating text:", time.time() - start_time)
+# output average time
+print("Average time:", (time.time() - start_time) / C)
+
+# Decode the generated sequence
+generated_text = tokenizer.decode(generated_ids.numpy()[0], skip_special_tokens=True)
+print("Generated text:", generated_text)
+
+
+# auto-regressive generation
 start_time = time.time()
 gen_token = 0
 for gen_token in range(1, max_length+1):
+    print(f'generated_ids: {generated_ids}, {type(generated_ids)}')
     outputs = model(input_ids=generated_ids)
     logits = outputs.logits
     predicted_id = tf.argmax(logits[:, -1, :], axis=-1, output_type=tf.int32)
@@ -58,7 +79,6 @@ for gen_token in range(1, max_length+1):
 print("Time for generating text:", time.time() - start_time)
 # output average time
 print("Average time:", (time.time() - start_time) / gen_token)
-
 
 # Decode the generated sequence
 generated_text = tokenizer.decode(generated_ids.numpy()[0], skip_special_tokens=True)

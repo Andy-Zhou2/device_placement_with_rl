@@ -522,7 +522,7 @@ class TFOPTDecoder(keras.layers.Layer):
         # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
-        with tf.device(config.device_placement[33]):
+        with tf.device(config.device_placement[config.num_hidden_layers+1]):
             if config.do_layer_norm_before and not config._remove_final_layer_norm:
                 self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
             else:
@@ -578,6 +578,7 @@ class TFOPTDecoder(keras.layers.Layer):
 
         return combined_attention_mask
 
+    # @tf.function
     @unpack_inputs
     def call(
         self,
@@ -721,7 +722,7 @@ class TFOPTDecoder(keras.layers.Layer):
                 if output_attentions:
                     all_self_attns += (layer_self_attn,)
 
-        with tf.device(self.config.device_placement[33]):
+        with tf.device(self.config.device_placement[self.config.num_hidden_layers+1]):
             if self.final_layer_norm is not None:
                 hidden_states = self.final_layer_norm(hidden_states)
 
