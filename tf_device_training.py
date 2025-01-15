@@ -4,6 +4,8 @@ from torch import optim
 from tf_device_network import AutoRegressiveTransformerPolicy
 from tf_device_measure import measure_inference_time_3devices
 import logging
+import multiprocessing
+import tensorflow as tf
 
 
 def set_seed(seed):
@@ -13,10 +15,39 @@ def set_seed(seed):
     :param seed: The random seed to use.
     """
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    # torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
+
+
+def spawn_time_measurement_process(action, n_iters):
+    """
+    Spawns a process to measure the inference time for a given action.
+
+    :param action: The action to measure.
+    :param n_iters: The number of iterations to perform.
+    """
+    queue = multiprocessing.Queue()
+    p = multiprocessing.Process(
+        target=measure_inference_time_3devices,
+        kwargs={"devices": action, "n_iters": n_iters, "queue": queue}
+    )
+    p.start()
+    p.join(timeout=10)
+
+    if p.is_alive():
+        logging.info(f"Process for action {action} did not complete within 10 seconds. Terminating.")
+        p.terminate()
+        p.join()
+        return 10
+    elif p.exitcode != 0:
+        logging.info(f"Process for action {action} exited with code {p.exitcode}. Assume OOM.")
+        return 10
+    else:  # Process completed successfully
+        t = queue.get()
+        logging.info(f"Process for action {action} completed successfully. Time: {t}")
+        return t
 
 
 def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
@@ -132,8 +163,8 @@ def train(
             policy,
             batch_size,
             baseline,
-            measure_inference_time_3devices,
-            lambda: 10 if iteration < 200 else 100,
+            spawn_time_measurement_process,
+            lambda: 10 if iteration < 10 else 100,
         )
 
         update_fn(policy, optimizer, log_probs, actions, advantages, **update_kwargs)
@@ -152,6 +183,8 @@ def train(
 
 
 if __name__ == "__main__":
+    # multiprocessing.set_start_method("spawn")
+
     ALGO = "PPO"  # "REINFORCE"
     # Configure logging to write to a specific file with a desired format
     logging.basicConfig(
