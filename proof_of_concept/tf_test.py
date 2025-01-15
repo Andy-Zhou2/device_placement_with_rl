@@ -13,7 +13,7 @@ class ConfigurableModel(tf.Module):
         self.device_dense1 = device_dense1
         self.device_dense2 = device_dense2
 
-        D = 3000000
+        D = 300000
 
         with tf.device(self.device_w1):
             self.w1 = tf.Variable(tf.random.normal([10, D]), name='w1')
@@ -23,7 +23,7 @@ class ConfigurableModel(tf.Module):
             self.w2 = tf.Variable(tf.random.normal([D, 1]), name='w2')
             self.b2 = tf.Variable(tf.zeros([1]), name='b2')
 
-    @tf.function
+    # @tf.function
     def __call__(self, x):
         with tf.device(self.device_dense1):
             x = tf.matmul(x, self.w1) + self.b1
@@ -42,12 +42,15 @@ def create_dataset(num_samples=1000):
 
 # Define configurations as a list of device placements
 configs = [
-    ["/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0"],
-    ["/CPU:0", "/CPU:0", "/GPU:0", "/CPU:0", "/GPU:0"],
+    # ["/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0"],
+    # ["/CPU:0", "/CPU:0", "/GPU:0", "/CPU:0", "/GPU:0"],
+    # ["/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0"],
+    # ["/CPU:0", "/GPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
+    # ["/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0", "/GPU:0"],
+    # ["/GPU:0", "/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0"],
     ["/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0"],
-    ["/CPU:0", "/GPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
-    ["/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0", "/GPU:0"],
-    ["/GPU:0", "/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0"],
+    ["/GPU:0", "/GPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
+    ["/CPU:0", "/CPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
 ]
 
 
@@ -70,7 +73,7 @@ def run_with_config(config, queue):
         X = create_dataset(num_samples=1000)
 
     times = []
-    for i in range(2):
+    for i in range(500):
         start_time = time.time()
         _ = model(X)
         tf.test.experimental.sync_devices()
@@ -81,7 +84,7 @@ def run_with_config(config, queue):
 
     average_time = sum(times) / len(times)
     queue.put((config, average_time))
-    print(f"Config: {config} -> Average Time: {average_time:.4f} seconds")
+    print(f"Config: {config} -> Average Time: {average_time} seconds")
 
 
 if __name__ == "__main__":
