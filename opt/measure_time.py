@@ -5,7 +5,7 @@ import tensorflow as tf
 from transformers import AutoTokenizer, AutoConfig, TFAutoModelForCausalLM
 import logging
 
-from task_config import DEVICE_OPTIONS, MODEL_NAME, INPUT_TOKEN_IDS
+from task_config import DEVICE_OPTIONS, MODEL_NAME, INPUT_TOKEN_IDS, PROCESS_WAIT_TIME, FAILURE_LOG_TIME
 
 
 def measure_time_with_process(action, queue, n_warmup=1, n_iters=100, batch_size=1000):
@@ -16,8 +16,9 @@ def measure_time_with_process(action, queue, n_warmup=1, n_iters=100, batch_size
         try:
             tf.config.set_logical_device_configuration(
                 gpus[0],
-                [tf.config.LogicalDeviceConfiguration(memory_limit=8000),
-                 tf.config.LogicalDeviceConfiguration(memory_limit=8000), ]
+                [tf.config.LogicalDeviceConfiguration(memory_limit=400),
+                 # tf.config.LogicalDeviceConfiguration(memory_limit=8000),
+                 ]
             )
             logical_gpus = tf.config.list_logical_devices('GPU')
             print(len(gpus), "Physical GPU,", len(logical_gpus), "Logical GPUs")
@@ -61,16 +62,16 @@ def spawn_time_measurement_process(action, n_iters):
         kwargs={"action": action, "n_iters": n_iters, "queue": queue}
     )
     p.start()
-    p.join(timeout=10)
+    p.join(timeout=PROCESS_WAIT_TIME)
 
     if p.is_alive():
         logging.info(f"Process for action {action} did not complete within 10 seconds. Terminating.")
         p.terminate()
         p.join()
-        return 10
+        return FAILURE_LOG_TIME
     elif p.exitcode != 0:
         logging.info(f"Process for action {action} exited with code {p.exitcode}. Assume OOM.")
-        return 10
+        return FAILURE_LOG_TIME
     else:  # Process completed successfully
         t = queue.get()
         logging.info(f"Process for action {action} completed successfully. Time: {t}")

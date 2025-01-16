@@ -18,7 +18,7 @@ if gpus:
         # Virtual devices must be set before GPUs have been initialized
         print(e)
 
-device_placement = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+device_placement = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]
 DEVICE_OPTIONS = [
     "/CPU:0",
     "/GPU:0",

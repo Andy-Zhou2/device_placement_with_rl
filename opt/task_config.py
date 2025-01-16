@@ -1,14 +1,26 @@
 import numpy as np
 from transformers import AutoConfig
-import tensorflow as tf
 
 # Device options
 DEVICE_OPTIONS = [
     "/CPU:0",
     "/GPU:0",
-    "/GPU:1",
+    # "/GPU:1",
 ]
 NUM_DEVICE_CHOICES = len(DEVICE_OPTIONS)
+
+# RL algorithm options
+ALGO = "PPO"  # "REINFORCE"
+PROCESS_WAIT_TIME = 10  # the process waits for this time before killing the process
+FAILURE_LOG_TIME = 0.5  # if the process fails, it returns this time
+NUM_BATCHES = 250
+BATCH_SIZE = 10
+BASELINE_DECAY = 0.5
+PPO_CLIP = 0.2
+PPO_EPOCHS = 5
+
+# measurement options
+MEASURE_REPETITIONS = 10
 
 # Model options
 MODEL_NAME = 'facebook/opt-125m'

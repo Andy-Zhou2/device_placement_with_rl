@@ -4,9 +4,12 @@ from torch import optim
 from policy_network import AutoRegressiveTransformerPolicy
 from measure_time import spawn_time_measurement_process
 import logging
+from logging_utils import copy_files_to_next_experiment_folder
 
 from task_config import (OP_TYPES, ADJ_FORWARD, ADJ_BACKWARD, SHAPES, NUM_DEVICE_CHOICES,
-                         NUM_OPERATIONS, OPERATION_VOCAB_SIZE)
+                         NUM_OPERATIONS, OPERATION_VOCAB_SIZE, ALGO,
+                         NUM_BATCHES, BATCH_SIZE, BASELINE_DECAY,
+                         MEASURE_REPETITIONS)
 
 
 def set_seed(seed):
@@ -43,7 +46,7 @@ def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
         t = torch.tensor(inference_fn(action, n_iters=n_iters))
         reward = -torch.sqrt(t)  # Example reward function
 
-        logging.info(f"Iteration: {i}, Action: {action}, Reward: {reward.item()}, Time: {t.item()}")
+        logging.info(f"Iteration: {i}, Reward: {reward.item()}")
 
         log_probs_buffer.append(log_prob)
         actions_buffer.append(action)
@@ -139,7 +142,7 @@ def train(
             batch_size,
             baseline,
             spawn_time_measurement_process,
-            lambda: 10 #if iteration < 10 else 100,
+            lambda: MEASURE_REPETITIONS
         )
 
         update_fn(policy, optimizer, log_probs, actions, advantages, **update_kwargs)
@@ -158,12 +161,11 @@ def train(
 
 
 if __name__ == "__main__":
-    # multiprocessing.set_start_method("spawn")
+    logging_dir = copy_files_to_next_experiment_folder(r'../experiment_logs')  # Returns the logging directory
 
-    ALGO = "PPO"  # "REINFORCE"
     # Configure logging to write to a specific file with a desired format
     logging.basicConfig(
-        filename=F'../experiment_logs/{ALGO}.log',  # Replace with your log file path
+        filename=logging_dir / f'{ALGO}.log',  # Replace with your log file path
         filemode='a',  # Append mode; change to 'w' for overwrite mode
         level=logging.INFO,  # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format='%(asctime)s - %(levelname)s - %(message)s'
@@ -188,23 +190,24 @@ if __name__ == "__main__":
     optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 
     if ALGO == "PPO":
+        from task_config import PPO_CLIP, PPO_EPOCHS
         train(
             policy=policy,
             optimizer=optimizer,
-            num_baches=250,
-            batch_size=10,
-            baseline_decay=0.9,
+            num_baches=NUM_BATCHES,
+            batch_size=BATCH_SIZE,
+            baseline_decay=BASELINE_DECAY,
             update_fn=ppo_loss_update,
-            ppo_clip=0.2,
-            ppo_epochs=5
+            ppo_clip=PPO_CLIP,
+            ppo_epochs=PPO_EPOCHS,
         )
     elif ALGO == "REINFORCE":
         train(
             policy=policy,
             optimizer=optimizer,
-            num_baches=2000,
-            batch_size=10,
-            baseline_decay=0.9,
+            num_baches=NUM_BATCHES,
+            batch_size=BATCH_SIZE,
+            baseline_decay=BASELINE_DECAY,
             update_fn=reinforce_loss_update,
         )
     else:
