@@ -5,7 +5,7 @@ import tensorflow as tf
 from transformers import AutoTokenizer, AutoConfig, TFAutoModelForCausalLM
 import logging
 
-from task_config import DEVICE_OPTIONS, MODEL_NAME
+from task_config import DEVICE_OPTIONS, MODEL_NAME, INPUT_TOKEN_IDS
 
 
 def measure_time_with_process(action, queue, n_warmup=1, n_iters=100, batch_size=1000):
@@ -32,7 +32,7 @@ def measure_time_with_process(action, queue, n_warmup=1, n_iters=100, batch_size
     config.device_placement = devices  # Inject device placement
     model = TFAutoModelForCausalLM.from_config(config)
 
-    generated_ids = tf.constant([[2, 100, 657, 30581, 3923, 12346, 328]])
+    generated_ids = tf.constant(INPUT_TOKEN_IDS, dtype=tf.int32)
     times = []
     for i in range(n_iters):
         start = time.time()

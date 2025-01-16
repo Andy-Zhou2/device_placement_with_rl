@@ -2,9 +2,11 @@ import torch
 import numpy as np
 from torch import optim
 from policy_network import AutoRegressiveTransformerPolicy
-from measure_time import measure_inference_time_3devices
+from measure_time import spawn_time_measurement_process
 import logging
 
+from task_config import (OP_TYPES, ADJ_FORWARD, ADJ_BACKWARD, SHAPES, NUM_DEVICE_CHOICES,
+                         NUM_OPERATIONS, OPERATION_VOCAB_SIZE)
 
 
 def set_seed(seed):
@@ -15,8 +17,6 @@ def set_seed(seed):
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
-
-
 
 
 def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
@@ -127,13 +127,19 @@ def train(
     """
     baseline = 0.0
 
+    logits = policy()
+    logit_display = logits.detach().cpu().numpy()
+    prob_display = torch.softmax(logits, dim=-1).detach().cpu().numpy()
+    logging.info(f"Logits: {logit_display}, \n"
+                 f"Probs: {prob_display}")
+
     for iteration in range(num_baches):
         log_probs, actions, rewards, advantages, baseline = collect_data(
             policy,
             batch_size,
             baseline,
             spawn_time_measurement_process,
-            lambda: 10 if iteration < 10 else 100,
+            lambda: 10 #if iteration < 10 else 100,
         )
 
         update_fn(policy, optimizer, log_probs, actions, advantages, **update_kwargs)
@@ -157,14 +163,28 @@ if __name__ == "__main__":
     ALGO = "PPO"  # "REINFORCE"
     # Configure logging to write to a specific file with a desired format
     logging.basicConfig(
-        filename=F'experiment_logs/{ALGO}.log',  # Replace with your log file path
+        filename=F'../experiment_logs/{ALGO}.log',  # Replace with your log file path
         filemode='a',  # Append mode; change to 'w' for overwrite mode
         level=logging.INFO,  # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
     set_seed(42)
-    policy = AutoRegressiveTransformerPolicy()
+
+    op_types_tensor = torch.tensor(OP_TYPES, dtype=torch.long)  # shape [NUM_OPERATIONS]
+    adj_forward_tensor = torch.tensor(ADJ_FORWARD, dtype=torch.float32)  # shape [NUM_OPERATIONS, NUM_OPERATIONS]
+    adj_backward_tensor = torch.tensor(ADJ_BACKWARD, dtype=torch.float32)  # shape [NUM_OPERATIONS, NUM_OPERATIONS]
+    shape_tensor = torch.tensor(SHAPES, dtype=torch.float32)  # shape [NUM_OPERATIONS, 4]
+
+    policy = AutoRegressiveTransformerPolicy(
+        type_vocab_size=OPERATION_VOCAB_SIZE,
+        num_operations=NUM_OPERATIONS,
+        num_device_choices=NUM_DEVICE_CHOICES,
+        op_types_tensor=op_types_tensor,
+        adj_forward_tensor=adj_forward_tensor,
+        adj_backward_tensor=adj_backward_tensor,
+        shape_tensor=shape_tensor,
+    )
     optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 
     if ALGO == "PPO":
