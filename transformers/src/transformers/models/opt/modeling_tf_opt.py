@@ -749,25 +749,33 @@ class TFOPTDecoder(keras.layers.Layer):
         if self.built:
             return
         self.built = True
-        if getattr(self, "embed_tokens", None) is not None:
-            with tf.name_scope(self.embed_tokens.name):
-                self.embed_tokens.build(None)
-        if getattr(self, "embed_positions", None) is not None:
-            with tf.name_scope(self.embed_positions.name):
-                self.embed_positions.build(None)
-        if getattr(self, "final_layer_norm", None) is not None:
-            with tf.name_scope(self.final_layer_norm.name):
-                self.final_layer_norm.build([None, None, self.config.hidden_size])
-        if getattr(self, "project_out", None) is not None:
-            with tf.name_scope(self.project_out.name):
-                self.project_out.build([None, None, self.config.hidden_size])
-        if getattr(self, "project_in", None) is not None:
-            with tf.name_scope(self.project_in.name):
-                self.project_in.build([None, None, self.config.word_embed_proj_dim])
+
+        with tf.device(self.config.device_placement[0]):
+            if getattr(self, "embed_tokens", None) is not None:
+                with tf.name_scope(self.embed_tokens.name):
+                    self.embed_tokens.build(None)
+            if getattr(self, "embed_positions", None) is not None:
+                with tf.name_scope(self.embed_positions.name):
+                    self.embed_positions.build(None)
+
+        with tf.device(self.config.device_placement[self.config.num_hidden_layers+1]):
+            if getattr(self, "final_layer_norm", None) is not None:
+                with tf.name_scope(self.final_layer_norm.name):
+                    self.final_layer_norm.build([None, None, self.config.hidden_size])
+            if getattr(self, "project_out", None) is not None:
+                with tf.name_scope(self.project_out.name):
+                    self.project_out.build([None, None, self.config.hidden_size])
+
+        with tf.device(self.config.device_placement[0]):
+            if getattr(self, "project_in", None) is not None:
+                with tf.name_scope(self.project_in.name):
+                    self.project_in.build([None, None, self.config.word_embed_proj_dim])
+
         if getattr(self, "layers", None) is not None:
-            for layer in self.layers:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
+            for i, layer in enumerate(self.layers):
+                with tf.device(self.config.device_placement[1 + i]):
+                    with tf.name_scope(layer.name):
+                        layer.build(None)
 
 
 @keras_serializable
