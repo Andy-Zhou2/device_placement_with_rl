@@ -119,3 +119,31 @@ SHAPES = [
     [1000, 300000, 0, 0],  # dense1
     [1000, 1, 0, 0],  # dense2
 ]
+
+
+if __name__ == '__main__':
+    configs = [
+        [0, 0, 0],
+        [1,1,1],
+        [2, 2, 2],
+
+        [1, 0, 0],
+        [0, 1, 0 ],
+        [0, 0, 1],
+
+        [0,1,1],
+        [2,1,1],
+
+        [1,1,2],
+        [1,2,2],
+        [1,2,1]
+
+    ]
+
+    import multiprocessing
+
+    q = multiprocessing.Queue()
+
+    for c in configs:
+        measure_inference_time_3devices(c, q, n_iters=1000)
+        print(c, q.get())

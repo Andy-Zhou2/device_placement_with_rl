@@ -42,15 +42,15 @@ def create_dataset(num_samples=1000):
 
 # Define configurations as a list of device placements
 configs = [
-    # ["/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0", "/CPU:0"],
-    # ["/CPU:0", "/CPU:0", "/GPU:0", "/CPU:0", "/GPU:0"],
+    ["/CPU:0", "/GPU:0", "/GPU:0", "/CPU:0", "/CPU:0"],
+    ["/CPU:0", "/CPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
     # ["/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0"],
     # ["/CPU:0", "/GPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
     # ["/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0", "/GPU:0"],
     # ["/GPU:0", "/CPU:0", "/GPU:0", "/CPU:0", "/CPU:0"],
-    ["/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0"],
-    ["/GPU:0", "/GPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
-    ["/CPU:0", "/CPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
+    # ["/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0", "/GPU:0"],
+    # ["/GPU:0", "/GPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
+    # ["/CPU:0", "/CPU:0", "/CPU:0", "/GPU:0", "/GPU:0"],
 ]
 
 
@@ -73,7 +73,7 @@ def run_with_config(config, queue):
         X = create_dataset(num_samples=1000)
 
     times = []
-    for i in range(500):
+    for i in range(1000):
         start_time = time.time()
         _ = model(X)
         tf.test.experimental.sync_devices()
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         p.start()
 
         # Wait for the process to complete or timeout after 10 seconds
-        p.join(timeout=10)
+        p.join(timeout=1000)
 
         if p.is_alive():
             print(f"Process for config {config} timed out. Terminating...")

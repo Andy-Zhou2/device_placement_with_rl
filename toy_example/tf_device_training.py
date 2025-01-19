@@ -83,7 +83,7 @@ def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
     rewards_tensor = torch.stack(rewards_buffer)
     advantages = rewards_tensor - baseline
     batch_mean_reward = rewards_tensor.mean().item()
-    updated_baseline = baseline * 0.9 + batch_mean_reward * 0.1
+    updated_baseline = baseline * 0.2 + batch_mean_reward * 0.8
 
     return (
         torch.stack(log_probs_buffer),
@@ -141,7 +141,6 @@ def train(
         optimizer,
         num_baches,
         batch_size,
-        baseline_decay,
         update_fn,
         **update_kwargs
 ):
@@ -164,7 +163,7 @@ def train(
             batch_size,
             baseline,
             spawn_time_measurement_process,
-            lambda: 10 if iteration < 10 else 100,
+            lambda: 100,
         )
 
         update_fn(policy, optimizer, log_probs, actions, advantages, **update_kwargs)
@@ -188,13 +187,13 @@ if __name__ == "__main__":
     ALGO = "PPO"  # "REINFORCE"
     # Configure logging to write to a specific file with a desired format
     logging.basicConfig(
-        filename=F'experiment_logs/{ALGO}.log',  # Replace with your log file path
+        filename=F'../experiment_logs/toy_example_{ALGO}.log',  # Replace with your log file path
         filemode='a',  # Append mode; change to 'w' for overwrite mode
         level=logging.INFO,  # Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
-    set_seed(42)
+    set_seed(45)
     policy = AutoRegressiveTransformerPolicy()
     optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 
@@ -204,7 +203,6 @@ if __name__ == "__main__":
             optimizer=optimizer,
             num_baches=250,
             batch_size=10,
-            baseline_decay=0.9,
             update_fn=ppo_loss_update,
             ppo_clip=0.2,
             ppo_epochs=5
@@ -215,7 +213,6 @@ if __name__ == "__main__":
             optimizer=optimizer,
             num_baches=2000,
             batch_size=10,
-            baseline_decay=0.9,
             update_fn=reinforce_loss_update,
         )
     else:
