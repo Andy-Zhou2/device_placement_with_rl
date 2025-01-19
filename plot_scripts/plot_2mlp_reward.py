@@ -11,13 +11,15 @@ data = []
 # algo = 'reinforce'
 algo = 'ppo'
 # read the file
-with open(f'../{algo}.log', 'r') as f:
+with open(f'../experiment_logs/v1/{algo}.log', 'r') as f:
     for line in f:
         m = r.search(line)
         if m:
             data.append([int(m.group(1)), float(m.group(2)), float(m.group(3))])
 
 
+# pick the first 250 batches
+data = data[:250]
 
 # plot the data
 data = list(zip(*data))
@@ -30,6 +32,7 @@ plt.plot(np.arange(len(data[1])), data[1], label='Mean Reward')
 
 # plt.plot(data[0], data[1], label='Mean Reward')
 # plt.plot(data[0], data[2], label='Baseline')
-plt.title(f'Mean Reward vs Batch for {algo}')
+plt.title(f'Mean Reward vs Batch for {algo.upper()}')
 plt.legend()
-plt.show()
+plt.tight_layout()
+plt.savefig(rf'../plot_figs/toy_example_mean_reward_{algo.upper()}.png', dpi=150)
