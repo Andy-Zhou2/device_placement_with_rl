@@ -16,8 +16,8 @@ def measure_time_with_process(action, queue, n_warmup=1, n_iters=100, batch_size
         try:
             tf.config.set_logical_device_configuration(
                 gpus[0],
-                [tf.config.LogicalDeviceConfiguration(memory_limit=400),
-                 # tf.config.LogicalDeviceConfiguration(memory_limit=8000),
+                [tf.config.LogicalDeviceConfiguration(memory_limit=600),
+                 tf.config.LogicalDeviceConfiguration(memory_limit=400),
                  ]
             )
             logical_gpus = tf.config.list_logical_devices('GPU')
@@ -33,7 +33,8 @@ def measure_time_with_process(action, queue, n_warmup=1, n_iters=100, batch_size
     config.device_placement = devices  # Inject device placement
     model = TFAutoModelForCausalLM.from_config(config)
 
-    generated_ids = tf.constant(INPUT_TOKEN_IDS, dtype=tf.int32)
+    with tf.device(devices[0]):
+        generated_ids = tf.constant(INPUT_TOKEN_IDS, dtype=tf.int32)
     times = []
     for i in range(n_iters):
         start = time.time()

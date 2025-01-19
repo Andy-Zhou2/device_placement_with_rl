@@ -5,22 +5,22 @@ from transformers import AutoConfig
 DEVICE_OPTIONS = [
     "/CPU:0",
     "/GPU:0",
-    # "/GPU:1",
-]
+    "/GPU:1",
+]  # modify the gpu init in measure_time.py as well
 NUM_DEVICE_CHOICES = len(DEVICE_OPTIONS)
 
 # RL algorithm options
 ALGO = "PPO"  # "REINFORCE"
-PROCESS_WAIT_TIME = 10  # the process waits for this time before killing the process
+PROCESS_WAIT_TIME = 100  # the process waits for this time before killing the process
 FAILURE_LOG_TIME = 0.5  # if the process fails, it returns this time
-NUM_BATCHES = 250
-BATCH_SIZE = 10
-BASELINE_DECAY = 0.5
-PPO_CLIP = 0.2
+NUM_BATCHES = 1_000
+BATCH_SIZE = 20
+BASELINE_DECAY = 0.2
+PPO_CLIP = 0.1
 PPO_EPOCHS = 5
 
 # measurement options
-MEASURE_REPETITIONS = 10
+MEASURE_REPETITIONS = 50
 
 # Model options
 MODEL_NAME = 'facebook/opt-125m'

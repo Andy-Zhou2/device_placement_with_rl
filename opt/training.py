@@ -22,28 +22,21 @@ def set_seed(seed):
     np.random.seed(seed)
 
 
-def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
-    """
-    Collects data for a single batch.
-
-    :param policy: Policy network (AutoRegressiveTransformerPolicy).
-    :param batch_size: Number of steps to collect per batch.
-    :param baseline: Current baseline for advantage calculation.
-    :param inference_fn: Function to measure inference time and convert it to reward.
-    :param n_iters_fn: Function to determine the number of iterations for inference.
-    :return: A tuple of (log_probs, actions, rewards, advantages, updated_baseline).
-    """
+def collect_data(policy, batch_size, baseline, inference_fn, n_iters, baseline_decay):
     log_probs_buffer = []
     actions_buffer = []
     rewards_buffer = []
+
+    best_config = (None, float('inf'))
 
     for i in range(batch_size):
         action, log_prob, _ = policy.sample_action_and_logprob()
         action = action[0]
         log_prob = log_prob[0]
 
-        n_iters = n_iters_fn()
         t = torch.tensor(inference_fn(action, n_iters=n_iters))
+        if t < best_config[1]:
+            best_config = (action, t)
         reward = -torch.sqrt(t)  # Example reward function
 
         logging.info(f"Iteration: {i}, Reward: {reward.item()}")
@@ -55,7 +48,7 @@ def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
     rewards_tensor = torch.stack(rewards_buffer)
     advantages = rewards_tensor - baseline
     batch_mean_reward = rewards_tensor.mean().item()
-    updated_baseline = baseline * 0.9 + batch_mean_reward * 0.1
+    updated_baseline = baseline * baseline_decay + batch_mean_reward * (1 - baseline_decay)
 
     return (
         torch.stack(log_probs_buffer),
@@ -63,6 +56,7 @@ def collect_data(policy, batch_size, baseline, inference_fn, n_iters_fn):
         rewards_tensor,
         advantages,
         updated_baseline,
+        best_config
     )
 
 
@@ -129,6 +123,7 @@ def train(
     :param update_kwargs: Additional arguments for the update function.
     """
     baseline = 0.0
+    best_config = (None, float('inf'))
 
     logits = policy()
     logit_display = logits.detach().cpu().numpy()
@@ -137,20 +132,25 @@ def train(
                  f"Probs: {prob_display}")
 
     for iteration in range(num_baches):
-        log_probs, actions, rewards, advantages, baseline = collect_data(
+        log_probs, actions, rewards, advantages, baseline, batch_best_config = collect_data(
             policy,
             batch_size,
             baseline,
             spawn_time_measurement_process,
-            lambda: MEASURE_REPETITIONS
+            MEASURE_REPETITIONS,
+            baseline_decay,
         )
+        if batch_best_config[1] < best_config[1]:
+            best_config = batch_best_config
 
         update_fn(policy, optimizer, log_probs, actions, advantages, **update_kwargs)
 
         logging.info(
             f"Batch: {iteration + 1}/{num_baches}, "
             f"Mean Reward: {rewards.mean().item()}, "
-            f"Baseline: {baseline}"
+            f"Baseline: {baseline}, "
+            f"Best Time: {best_config[1]}, "
+            f"Best Config: {best_config[0]}"
         )
 
         logits = policy()
