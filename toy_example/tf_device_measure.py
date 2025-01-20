@@ -124,26 +124,35 @@ SHAPES = [
 if __name__ == '__main__':
     configs = [
         [0, 0, 0],
-        [1,1,1],
-        [2, 2, 2],
-
-        [1, 0, 0],
-        [0, 1, 0 ],
-        [0, 0, 1],
-
-        [0,1,1],
-        [2,1,1],
-
-        [1,1,2],
-        [1,2,2],
-        [1,2,1]
+        # [1,1,1],
+        # [2, 2, 2],
+        #
+        # [1, 0, 0],
+        # [0, 1, 0 ],
+        # [0, 0, 1],
+        #
+        # [0,1,1],
+        # [2,1,1],
+        #
+        # [1,1,2],
+        # [1,2,2],
+        # [1,2,1]
 
     ]
 
     import multiprocessing
 
-    q = multiprocessing.Queue()
+    times = []
 
-    for c in configs:
-        measure_inference_time_3devices(c, q, n_iters=1000)
-        print(c, q.get())
+    q = multiprocessing.Queue()
+    for _ in range(1000):
+
+        for c in configs:
+            measure_inference_time_3devices(c, q, n_iters=5, n_warmup=1)
+            print(c, q.get())
+            times.append(q.get())
+
+    # plot histogram
+    import matplotlib.pyplot as plt
+    plt.hist(times, bins=100)
+    plt.show()

@@ -187,7 +187,7 @@ if __name__ == "__main__":
         adj_backward_tensor=adj_backward_tensor,
         shape_tensor=shape_tensor,
     )
-    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+    optimizer = optim.Adam(policy.parameters(), lr=1e-4)
 
     if ALGO == "PPO":
         from task_config import PPO_CLIP, PPO_EPOCHS

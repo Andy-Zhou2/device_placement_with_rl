@@ -16,9 +16,12 @@ def measure_time_with_process(action, queue, n_warmup=1, n_iters=100, batch_size
         try:
             tf.config.set_logical_device_configuration(
                 gpus[0],
-                [tf.config.LogicalDeviceConfiguration(memory_limit=600),
-                 tf.config.LogicalDeviceConfiguration(memory_limit=400),
-                 ]
+                [
+                    tf.config.LogicalDeviceConfiguration(memory_limit=250),
+                    tf.config.LogicalDeviceConfiguration(memory_limit=250),
+                    tf.config.LogicalDeviceConfiguration(memory_limit=250),
+                    tf.config.LogicalDeviceConfiguration(memory_limit=250),
+                ]
             )
             logical_gpus = tf.config.list_logical_devices('GPU')
             print(len(gpus), "Physical GPU,", len(logical_gpus), "Logical GPUs")

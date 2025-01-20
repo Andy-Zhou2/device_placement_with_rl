@@ -6,6 +6,8 @@ DEVICE_OPTIONS = [
     "/CPU:0",
     "/GPU:0",
     "/GPU:1",
+    "/GPU:2",
+    "/GPU:3",
 ]  # modify the gpu init in measure_time.py as well
 NUM_DEVICE_CHOICES = len(DEVICE_OPTIONS)
 
