@@ -36,10 +36,3 @@ def copy_files_to_next_experiment_folder(target_directory):
             shutil.copy(file, next_experiment_folder / file.name)
 
     return next_experiment_folder
-
-
-# Usage example
-if __name__ == "__main__":
-    target_directory = "../experiment_logs"  # Replace with the actual path
-    new_experiment_folder = copy_files_to_next_experiment_folder(target_directory)
-    print(new_experiment_folder)

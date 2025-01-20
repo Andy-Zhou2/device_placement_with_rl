@@ -131,26 +131,3 @@ class AutoRegressiveTransformerPolicy(nn.Module):
         dists = Categorical(logits=logits)
         log_prob = dists.log_prob(action).sum(dim=-1)
         return log_prob, logits
-
-
-if __name__ == '__main__':
-    op_types_tensor = torch.tensor(OP_TYPES, dtype=torch.long)  # shape [NUM_OPERATIONS]
-    adj_forward_tensor = torch.tensor(ADJ_FORWARD, dtype=torch.float32)  # shape [NUM_OPERATIONS, NUM_OPERATIONS]
-    adj_backward_tensor = torch.tensor(ADJ_BACKWARD, dtype=torch.float32)  # shape [NUM_OPERATIONS, NUM_OPERATIONS]
-    shape_tensor = torch.tensor(SHAPES, dtype=torch.float32)  # shape [NUM_OPERATIONS, 4]
-
-    net = AutoRegressiveTransformerPolicy(
-        type_vocab_size=OPERATION_VOCAB_SIZE,
-        num_operations=NUM_OPERATIONS,
-        num_device_choices=NUM_DEVICE_CHOICES,
-        op_types_tensor=op_types_tensor,
-        adj_forward_tensor=adj_forward_tensor,
-        adj_backward_tensor=adj_backward_tensor,
-        shape_tensor=shape_tensor,
-    )
-    logits = net()
-    print(logits)
-    action, log_prob, logits = net.sample_action_and_logprob()
-    print(action, log_prob, logits)
-    log_prob_again, logits = net.get_log_prob(action)
-    print(log_prob_again, logits)

@@ -182,8 +182,6 @@ def train(
 
 
 if __name__ == "__main__":
-    # multiprocessing.set_start_method("spawn")
-
     ALGO = "PPO"  # "REINFORCE"
     # Configure logging to write to a specific file with a desired format
     logging.basicConfig(

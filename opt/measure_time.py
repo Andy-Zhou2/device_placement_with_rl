@@ -80,7 +80,3 @@ def spawn_time_measurement_process(action, n_iters):
         t = queue.get()
         logging.info(f"Process for action {action} completed successfully. Time: {t}")
         return t
-
-
-if __name__ == '__main__':
-    print(spawn_time_measurement_process([0] * 14, 10))

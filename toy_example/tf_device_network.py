@@ -144,13 +144,3 @@ class AutoRegressiveTransformerPolicy(nn.Module):
         dists = Categorical(logits=logits)
         log_prob = dists.log_prob(action).sum(dim=-1)
         return log_prob, logits
-
-
-if __name__ == '__main__':
-    net = AutoRegressiveTransformerPolicy()
-    logits = net()
-    print(logits)
-    action, log_prob, logits = net.sample_action_and_logprob()
-    print(action, log_prob, logits)
-    log_prob_again, logits = net.get_log_prob(action)
-    print(log_prob_again, logits)
